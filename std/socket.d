@@ -57,9 +57,9 @@ version(Windows)
     pragma (lib, "ws2_32.lib");
     pragma (lib, "wsock32.lib");
 
-    private import std.c.windows.windows, std.c.windows.winsock, std.windows.syserror;
-    private alias std.c.windows.winsock.timeval _ctimeval;
-    private alias std.c.windows.winsock.linger _clinger;
+    private import std.c.windows.windows, std.windows.syserror;
+    private alias core.sys.windows.winsock2.timeval _ctimeval;
+    private alias core.sys.windows.winsock2.linger _clinger;
 
     enum socket_t : SOCKET { INVALID_SOCKET };
     private const int _SOCKET_ERROR = SOCKET_ERROR;
@@ -810,7 +810,7 @@ class InternetHost
     {
         return getHost!q{
             auto x = htonl(param);
-            auto he = gethostbyaddr(&x, 4, cast(int)AddressFamily.INET);
+            auto he = gethostbyaddr(cast(const(char)*)&x, 4, cast(int)AddressFamily.INET);
         }(addr);
     }
 
@@ -825,7 +825,7 @@ class InternetHost
             auto x = inet_addr(std.string.toStringz(param));
             enforce(x != INADDR_NONE,
                 new SocketParameterException("Invalid IPv4 address"));
-            auto he = gethostbyaddr(&x, 4, cast(int)AddressFamily.INET);
+            auto he = gethostbyaddr(cast(const(char)*)&x, 4, cast(int)AddressFamily.INET);
         }(addr);
     }
 }
@@ -1744,10 +1744,10 @@ public:
     {
         const(ubyte)[16]* addr;
         static if (is(typeof(IN6ADDR_ANY)))
-            return addr = &IN6ADDR_ANY.s6_addr, *addr;
+            return addr = &IN6ADDR_ANY._S6_u8, *addr;
         else
         static if (is(typeof(in6addr_any)))
-            return addr = &in6addr_any.s6_addr, *addr;
+            return addr = &in6addr_any._S6_u8, *addr;
         else
             static assert(0);
     }
@@ -1764,7 +1764,7 @@ public:
     /// Returns the IPv6 address.
     @property ubyte[16] addr() const
     {
-        return sin6.sin6_addr.s6_addr;
+        return sin6.sin6_addr._S6_u8;
     }
 
     /**
@@ -1806,7 +1806,7 @@ public:
     this(ubyte[16] addr, ushort port)
     {
         sin6.sin6_family = AddressFamily.INET6;
-        sin6.sin6_addr.s6_addr = addr;
+        sin6.sin6_addr._S6_u8 = addr;
         sin6.sin6_port = htons(port);
     }
 
@@ -1814,7 +1814,7 @@ public:
     this(ushort port)
     {
         sin6.sin6_family = AddressFamily.INET6;
-        sin6.sin6_addr.s6_addr = ADDR_ANY;
+        sin6.sin6_addr._S6_u8 = ADDR_ANY;
         sin6.sin6_port = htons(port);
     }
 
@@ -1830,7 +1830,7 @@ public:
         // instead.
         auto results = getAddressInfo(addr, AddressInfoFlags.NUMERICHOST);
         if (results.length && results[0].family == AddressFamily.INET6)
-            return (cast(sockaddr_in6*)results[0].address.name).sin6_addr.s6_addr;
+            return (cast(sockaddr_in6*)results[0].address.name).sin6_addr._S6_u8;
         throw new AddressException("Not an IPv6 address", 0);
     }
 }
@@ -2652,7 +2652,7 @@ public:
             flags = cast(SocketFlags)(flags | MSG_NOSIGNAL);
         }
         version( Windows )
-            auto sent = .send(sock, buf.ptr, to!int(buf.length), cast(int)flags);
+            auto sent = .send(sock, cast(ubyte*)buf.ptr, to!int(buf.length), cast(int)flags);
         else
             auto sent = .send(sock, buf.ptr, buf.length, cast(int)flags);
         return sent;
@@ -2679,7 +2679,7 @@ public:
         }
         version( Windows )
             return .sendto(
-                       sock, buf.ptr, std.conv.to!int(buf.length),
+                       sock, cast(ubyte*)buf.ptr, std.conv.to!int(buf.length),
                        cast(int)flags, to.name, to.nameLen
                        );
         else
@@ -2702,7 +2702,7 @@ public:
             flags = cast(SocketFlags)(flags | MSG_NOSIGNAL);
         }
         version(Windows)
-            return .sendto(sock, buf.ptr, to!int(buf.length), cast(int)flags, null, 0);
+            return .sendto(sock, cast(ubyte*)buf.ptr, to!int(buf.length), cast(int)flags, null, 0);
         else
             return .sendto(sock, buf.ptr, buf.length, cast(int)flags, null, 0);
     }
@@ -2728,7 +2728,7 @@ public:
         version(Windows)         // Does not use size_t
         {
             return buf.length
-                   ? .recv(sock, buf.ptr, to!int(buf.length), cast(int)flags)
+                   ? .recv(sock, cast(ubyte*)buf.ptr, to!int(buf.length), cast(int)flags)
                    : 0;
         } else {
             return buf.length
@@ -2759,7 +2759,7 @@ public:
         socklen_t nameLen = from.nameLen;
         version(Windows)
         {
-            auto read = .recvfrom(sock, buf.ptr, to!int(buf.length), cast(int)flags, from.name, &nameLen);
+            auto read = .recvfrom(sock, cast(ubyte*)buf.ptr, to!int(buf.length), cast(int)flags, from.name, &nameLen);
             assert(from.addressFamily == _family);
             // if(!read) //connection closed
             return read;
@@ -2787,7 +2787,7 @@ public:
             return 0;
         version(Windows)
         {
-            auto read = .recvfrom(sock, buf.ptr, to!int(buf.length), cast(int)flags, null, null);
+            auto read = .recvfrom(sock, cast(ubyte*)buf.ptr, to!int(buf.length), cast(int)flags, null, null);
             // if(!read) //connection closed
             return read;
         } else {

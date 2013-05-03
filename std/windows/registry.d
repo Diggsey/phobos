@@ -533,11 +533,11 @@ body
     DWORD cbData = u.qw.sizeof;
 
     auto keyname = toUTF16z(name);
-    LONG res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, data, &cbData);
+    LONG res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, cast(ubyte*)data, &cbData);
     if (res == ERROR_MORE_DATA)
     {
         data = (new ubyte[cbData]).ptr;
-        res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, data, &cbData);
+        res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, cast(ubyte*)data, &cbData);
     }
 
     enforceSucc(res,
@@ -594,11 +594,11 @@ body
     auto keyname = toUTF16z(name);
     wchar[] data = new wchar[256];
     DWORD cbData = to!DWORD(data.length * wchar.sizeof);
-    LONG res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, data.ptr, &cbData);
+    LONG res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, cast(ubyte*)data.ptr, &cbData);
     if (res == ERROR_MORE_DATA)
     {
         data.length = cbData / wchar.sizeof;
-        res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, data.ptr, &cbData);
+        res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, cast(ubyte*)data.ptr, &cbData);
     }
     else if (res == ERROR_SUCCESS)
     {
@@ -634,7 +634,7 @@ body
     REG_VALUE_TYPE type;
 
     DWORD cbData = value.sizeof;
-    enforceSucc(RegQueryValueExW(hkey, toUTF16z(name), null, cast(LPDWORD) &type, &value, &cbData),
+    enforceSucc(RegQueryValueExW(hkey, toUTF16z(name), null, cast(LPDWORD) &type, cast(ubyte*)&value, &cbData),
         "Cannot read the requested value");
     enforce(type == reqType,
             new RegistryException("Value type has been changed since the value was acquired"));
@@ -670,7 +670,7 @@ body
     REG_VALUE_TYPE type;
 
     DWORD cbData = value.sizeof;
-    enforceSucc(RegQueryValueExW(hkey, toUTF16z(name), null, cast(LPDWORD) &type, &value, &cbData),
+    enforceSucc(RegQueryValueExW(hkey, toUTF16z(name), null, cast(LPDWORD) &type, cast(ubyte*)&value, &cbData),
         "Cannot read the requested value");
     enforce(type == reqType,
             new RegistryException("Value type has been changed since the value was acquired"));
@@ -698,11 +698,11 @@ body
     DWORD cbData = to!DWORD(data.length);
     LONG res;
     auto keyname = toUTF16z(name);
-    res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, data.ptr, &cbData);
+    res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, cast(ubyte*)data.ptr, &cbData);
     if (res == ERROR_MORE_DATA)
     {
         data.length = cbData;
-        res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, data.ptr, &cbData);
+        res = RegQueryValueExW(hkey, keyname, null, cast(LPDWORD) &type, cast(ubyte*)data.ptr, &cbData);
     }
     enforceSucc(res, "Cannot read the requested value");
     enforce(type == reqType,

@@ -127,7 +127,6 @@ import std.utf;
 version(Windows)
 {
     import core.sys.windows.windows;
-    import std.c.windows.winsock;
     import std.windows.registry;
 }
 else version(Posix)
