@@ -291,18 +291,18 @@ struct File
     {
         FILE * handle = null; // Is null iff this Impl is closed by another File
         uint refs = uint.max / 2;
-        bool isPipe;
+        bool isPopened; // true iff the stream has been created by popen()
     }
     private Impl* _p;
     private string _name;
 
-    private this(FILE* handle, string name, uint refs = 1, bool isPipe = false)
+    package this(FILE* handle, string name, uint refs = 1, bool isPopened = false)
     {
         assert(!_p);
         _p = cast(Impl*) enforce(malloc(Impl.sizeof), "Out of memory");
         _p.handle = handle;
         _p.refs = refs;
-        _p.isPipe = isPipe;
+        _p.isPopened = isPopened;
         _name = name;
     }
 
@@ -472,7 +472,7 @@ Throws: $(D ErrnoException) on error.
         scope(exit) _p.handle = null; // nullify the handle anyway
         version (Posix)
         {
-            if (_p.isPipe)
+            if (_p.isPopened)
             {
                 auto res = .pclose(_p.handle);
                 errnoEnforce(res != -1,
@@ -809,24 +809,19 @@ Throws: $(D Exception) if the file is not opened.
         w.put('\n');
     }
 
-/**********************************
-Read line from stream $(D fp) and write it to $(D buf[]), including
-terminating character.
+/**
+Read line from stream $(D fp) and return it as a specified type.
 
-This is often faster than $(D File.readln(dchar)) because the buffer
-is reused each call. Note that reusing the buffer means that the
-previous contents of it has to be copied if needed.
+This version manages its own read buffer, which means one memory allocation per call. If you are not 
+retaining a reference to the read data, consider the $(D File.readln(buf)) version, which may offer 
+better performance as it reuses its read buffer.
 
 Params:
-fp = input stream
-buf = buffer used to store the resulting line data. buf is
-resized as necessary.
+    S = Template parameter; the type of the allocated buffer, and the type returned. Defaults to $(D string)
+    terminator = line terminator (by default, '\n')
 
 Returns:
-0 for end of file, otherwise number of characters read
-
-Throws: $(D StdioException) on I/O error, or $(D UnicodeException) on Unicode
-conversion error.
+    The line that was read, including the line terminator character. 
 
 Example:
 ---
@@ -835,17 +830,13 @@ import std.stdio;
 
 int main()
 {
-    char[] buf;
-    while (stdin.readln(buf))
+    string buf;
+    while ((buf = readln()) !is null)
         write(buf);
     return 0;
 }
 ---
-
-This method is more efficient than the one in the previous example
-because $(D stdin.readln(buf)) reuses (if possible) memory allocated
-by $(D buf), whereas $(D buf = stdin.readln()) makes a new memory allocation
-with every line.  */
+*/
     S readln(S = string)(dchar terminator = '\n')
     {
         Unqual!(ElementEncodingType!S)[] buf;
@@ -873,7 +864,57 @@ with every line.  */
         }
     }
 
-/** ditto */
+/**
+Read line from stream $(D fp) and write it to $(D buf[]), including
+terminating character.
+
+This is often faster than $(D buf = File.readln()) because the buffer
+is reused each call. Note that reusing the buffer means that the
+previous contents of it has to be copied if needed.
+
+Params:
+fp = input stream
+buf = buffer used to store the resulting line data. buf is
+resized as necessary.
+
+Returns:
+0 for end of file, otherwise number of characters read
+
+Throws: $(D StdioException) on I/O error, or $(D UnicodeException) on Unicode
+conversion error.
+
+Example:
+---
+// Reads $(D stdin) into a buffer
+// Dumps the buffer to $(D stdout) when it gets a "q"
+
+int main()
+{
+    string[] outBuf;
+    string buf;
+
+    while (stdin.readln(buf))
+    {
+        if (buf[0] == 'q')
+            break;
+
+        outBuf ~= buf.idup;
+    }
+
+    foreach (line; outBuf)
+    {
+        write(line);
+    }
+
+    return 0;
+}
+---
+
+This method is more efficient than the one in the previous example
+because $(D stdin.readln(buf)) reuses (if possible) memory allocated
+by $(D buf), whereas $(D buf = stdin.readln()) makes a new memory allocation
+with every line. 
+*/
     size_t readln(C)(ref C[] buf, dchar terminator = '\n') if (isSomeChar!C && !is(C == enum))
     {
         static if (is(C == char))
@@ -885,8 +926,8 @@ with every line.  */
         {
             // TODO: optimize this
             string s = readln(terminator);
-            if (!s.length) return 0;
             buf.length = 0;
+            if (!s.length) return 0;
             foreach (wchar c; s)
             {
                 buf ~= c;
@@ -920,15 +961,19 @@ with every line.  */
     {
         auto deleteme = testFilename();
         std.file.write(deleteme, "hello\n\rworld\nhow\n\rare ya");
-        auto witness = [ "hello\n\r", "world\nhow\n\r", "are ya" ];
         scope(exit) std.file.remove(deleteme);
-        auto f = File(deleteme);
-        uint i = 0;
-        char[] buf;
-        while (f.readln(buf, "\n\r"))
+        foreach (C; Tuple!(char, wchar, dchar).Types)
         {
-            assert(i < witness.length);
-            assert(buf == witness[i++]);
+            immutable(C)[][] witness = [ "hello\n\r", "world\nhow\n\r", "are ya" ];
+            auto f = File(deleteme);
+            uint i = 0;
+            C[] buf;
+            while (f.readln(buf, "\n\r"))
+            {
+                assert(i < witness.length);
+                assert(buf == witness[i++]);
+            }
+            assert(buf.length==0);
         }
     }
 
@@ -2385,7 +2430,10 @@ Initialize with a message and an error code. */
             auto s = std.c.string.strerror(errno);
         }
         auto sysmsg = to!string(s);
-        super(message ? message ~ "(" ~ sysmsg ~ ")" : sysmsg);
+        // If e is 0, we don't use the system error message.  (The message
+        // is "Success", which is rather pointless for an exception.)
+        super(e == 0 ? message
+                     : (message ? message ~ " (" ~ sysmsg ~ ")" : sysmsg));
     }
 
 /** Convenience functions that throw an $(D StdioException). */
