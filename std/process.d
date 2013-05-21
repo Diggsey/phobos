@@ -486,7 +486,7 @@ private Pid spawnProcessImpl(in char[] commandLine,
     auto envz = createEnv(env, !(config & Config.newEnv));
 
     // Startup info for CreateProcessW().
-    STARTUPINFO_W startinfo;
+    STARTUPINFOW startinfo;
     startinfo.cb = startinfo.sizeof;
     startinfo.dwFlags = STARTF_USESTDHANDLES;
 
